@@ -1,0 +1,9 @@
+Platform=windows
+Type=DLL
+APIS=\
+cinema.framework;\
+cinema_hybrid.framework;\
+core.framework
+C4D=true
+stylecheck.level=0
+ModuleId=net.pikey.c4d_prores

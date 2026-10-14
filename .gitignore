@@ -1,0 +1,5 @@
+# Build output (includes a bundled ffmpeg.exe, ~100 MB per version)
+dist/
+build/_work/
+*.pdb
+*.log
