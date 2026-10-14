@@ -27,14 +27,9 @@
 using namespace cinema;
 #endif
 
-// TODO: Replace with a unique ID from https://developers.maxon.net/forum/pid before distributing.
-// 1000001-1000010 are reserved by Maxon for local testing.
-static const Int32 ID_PRORES_SAVER = 1000001;
-
 // Settings container IDs (stored by Cinema 4D with the render settings).
 enum
 {
-	PRORES_PROFILE = 1000,	// Int32, see ProResProfile
 	PRORES_FFMPEG_PATH = 1001,	// String, optional explicit path to ffmpeg.exe
 	PRORES_NTSC_RATE = 1002,	// Bool, encode fps*1000/1001 (23.976, 29.97, 59.94)
 	PRORES_KEEP_ALPHA = 1003	// Bool, write alpha for 4444 / 4444 XQ
@@ -50,19 +45,29 @@ enum ProResProfile
 	PROFILE_4444_XQ = 5
 };
 
-static const Char* const g_profileNames[] = {
-	"ProRes 422 Proxy", "ProRes 422 LT", "ProRes 422", "ProRes 422 HQ", "ProRes 4444", "ProRes 4444 XQ"
+// Each profile is registered as its own entry in the render settings' format list, so the profile is
+// visible and selectable there directly (and alpha is offered only for the 4444 variants).
+// TODO: Replace the IDs with unique ones from https://developers.maxon.net/forum/pid before
+// distributing. 1000001-1000010 are reserved by Maxon for local testing.
+struct ProResFormat
+{
+	Int32 id;
+	Int32 profile;
+	const Char* name;
 };
 
-static Int32 GetProfile(const BaseContainer* data)
-{
-	const Int32 p = data ? data->GetInt32(PRORES_PROFILE, PROFILE_422_HQ) : PROFILE_422_HQ;
-	return (p < PROFILE_PROXY || p > PROFILE_4444_XQ) ? PROFILE_422_HQ : p;
-}
+static const ProResFormat g_formats[] = {
+	{ 1000001, PROFILE_422_HQ, "ProRes 422 HQ (FFmpeg)" },
+	{ 1000002, PROFILE_4444, "ProRes 4444 (FFmpeg)" },
+	{ 1000003, PROFILE_4444_XQ, "ProRes 4444 XQ (FFmpeg)" },
+	{ 1000004, PROFILE_422, "ProRes 422 (FFmpeg)" },
+	{ 1000005, PROFILE_LT, "ProRes 422 LT (FFmpeg)" },
+	{ 1000006, PROFILE_PROXY, "ProRes 422 Proxy (FFmpeg)" },
+};
 
-static Bool UsesAlpha(const BaseContainer* data)
+static Bool UsesAlpha(Int32 profile, const BaseContainer* data)
 {
-	return GetProfile(data) >= PROFILE_4444 && (data ? data->GetBool(PRORES_KEEP_ALPHA, true) : true);
+	return profile >= PROFILE_4444 && (data ? data->GetBool(PRORES_KEEP_ALPHA, true) : true);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -168,9 +173,8 @@ static void CloseHandleSafe(HANDLE& h)
 }
 
 static IMAGERESULT StartFfmpeg(ProResMovie& mv, const std::wstring& ffmpeg, const std::wstring& outPath,
-	const BaseContainer* data, Int32 fps)
+	Int32 profile, const BaseContainer* data, Int32 fps)
 {
-	const Int32 profile = GetProfile(data);
 	const Bool ntsc = data ? data->GetBool(PRORES_NTSC_RATE, false) : false;
 	if (fps <= 0)
 		fps = 30;
@@ -263,33 +267,28 @@ class ProResSettingsDialog : public GeModalDialog
 {
 	enum
 	{
-		IDC_PROFILE = 2000,
-		IDC_ALPHA,
+		IDC_ALPHA = 2000,
 		IDC_NTSC,
 		IDC_FFMPEG,
 		IDC_FFMPEG_INFO
 	};
 
 	BaseContainer* _data;
+	const ProResFormat& _format;
 
 public:
-	explicit ProResSettingsDialog(BaseContainer* data) : _data(data) { }
+	ProResSettingsDialog(BaseContainer* data, const ProResFormat& format) : _data(data), _format(format) { }
 
 	virtual Bool CreateLayout()
 	{
-		SetTitle("ProRes (FFmpeg)"_s);
+		SetTitle(maxon::String(_format.name));
 
 		GroupBegin(0, BFH_SCALEFIT | BFV_TOP, 2, 0, String(), 0);
 		GroupBorderSpace(10, 10, 10, 4);
 		GroupSpace(8, 6);
 
-		AddStaticText(0, BFH_LEFT, 0, 0, "Profile"_s, 0);
-		AddComboBox(IDC_PROFILE, BFH_SCALEFIT, 220, 0);
-		for (Int32 i = PROFILE_PROXY; i <= PROFILE_4444_XQ; ++i)
-			AddChild(IDC_PROFILE, i, maxon::String(g_profileNames[i]));
-
 		AddStaticText(0, BFH_LEFT, 0, 0, String(), 0);
-		AddCheckbox(IDC_ALPHA, BFH_LEFT, 0, 0, "Alpha (4444 / 4444 XQ)"_s);
+		AddCheckbox(IDC_ALPHA, BFH_LEFT, 0, 0, "Write alpha (also enable Alpha Channel in Save settings)"_s);
 
 		AddStaticText(0, BFH_LEFT, 0, 0, String(), 0);
 		AddCheckbox(IDC_NTSC, BFH_LEFT, 0, 0, "NTSC rate (x 1000/1001: 23.976, 29.97, 59.94)"_s);
@@ -308,7 +307,6 @@ public:
 
 	virtual Bool InitValues()
 	{
-		SetInt32(IDC_PROFILE, GetProfile(_data));
 		SetBool(IDC_ALPHA, _data->GetBool(PRORES_KEEP_ALPHA, true));
 		SetBool(IDC_NTSC, _data->GetBool(PRORES_NTSC_RATE, false));
 		SetString(IDC_FFMPEG, _data->GetString(PRORES_FFMPEG_PATH));
@@ -318,22 +316,19 @@ public:
 
 	virtual Bool Command(Int32 id, const BaseContainer& msg)
 	{
-		if (id == IDC_PROFILE || id == IDC_FFMPEG)
+		if (id == IDC_FFMPEG)
 			UpdateInfo();
 		return true;
 	}
 
 	virtual Bool AskClose()
 	{
-		Int32 profile = PROFILE_422_HQ;
 		Bool alpha = true, ntsc = false;
 		maxon::String path;
-		GetInt32(IDC_PROFILE, profile);
 		GetBool(IDC_ALPHA, alpha);
 		GetBool(IDC_NTSC, ntsc);
 		GetString(IDC_FFMPEG, path);
 
-		_data->SetInt32(PRORES_PROFILE, profile);
 		_data->SetBool(PRORES_KEEP_ALPHA, alpha);
 		_data->SetBool(PRORES_NTSC_RATE, ntsc);
 		_data->SetString(PRORES_FFMPEG_PATH, path);
@@ -343,9 +338,7 @@ public:
 private:
 	void UpdateInfo()
 	{
-		Int32 profile = PROFILE_422_HQ;
-		GetInt32(IDC_PROFILE, profile);
-		Enable(IDC_ALPHA, profile >= PROFILE_4444);
+		Enable(IDC_ALPHA, _format.profile >= PROFILE_4444);
 
 		maxon::String path;
 		GetString(IDC_FFMPEG, path);
@@ -362,8 +355,16 @@ private:
 
 class ProResSaver : public BitmapSaverData
 {
+	const ProResFormat* _format = nullptr;
+
 public:
-	static ProResSaver* Alloc() { return NewObjClear(ProResSaver); }
+	static ProResSaver* Alloc(const ProResFormat& format)
+	{
+		ProResSaver* saver = NewObjClear(ProResSaver);
+		if (saver)
+			saver->_format = &format;
+		return saver;
+	}
 
 	virtual IMAGERESULT Save(const Filename& name, BaseBitmap* bm, BaseContainer* data, SAVEBIT savebits)
 	{
@@ -381,13 +382,13 @@ public:
 	{
 		if (!data)
 			return false;
-		ProResSettingsDialog dlg(data);
+		ProResSettingsDialog dlg(data, *_format);
 		return dlg.Open(-1, -1, 480, 0) && dlg.GetResult();
 	}
 
 	virtual Int32 GetMaxAlphas(BaseContainer* data)
 	{
-		return UsesAlpha(data) ? 1 : 0;
+		return UsesAlpha(_format->profile, data) ? 1 : 0;
 	}
 
 	virtual Int32 GetMaxResolution(Bool layers)
@@ -415,10 +416,10 @@ public:
 
 		mv->width = bm->GetBw();
 		mv->height = bm->GetBh();
-		mv->alpha = UsesAlpha(data) && (savebits & SAVEBIT::ALPHA) != SAVEBIT::NONE;
+		mv->alpha = UsesAlpha(_format->profile, data) && (savebits & SAVEBIT::ALPHA) != SAVEBIT::NONE;
 		mv->frame.resize((size_t)mv->width * (size_t)mv->height * (mv->alpha ? 4 : 3) * 2);
 
-		const IMAGERESULT res = StartFfmpeg(*mv, ffmpeg, ToWide(name.GetString()), data, fps);
+		const IMAGERESULT res = StartFfmpeg(*mv, ffmpeg, ToWide(name.GetString()), _format->profile, data, fps);
 		if (res != IMAGERESULT::OK)
 		{
 			GePrint("ProRes: could not start "_s + FromWide(ffmpeg));
@@ -502,5 +503,10 @@ Bool RegisterProResSaver()
 {
 	const Int32 flags = PLUGINFLAG_BITMAPSAVER_SUPPORT_8BIT | PLUGINFLAG_BITMAPSAVER_SUPPORT_16BIT |
 		PLUGINFLAG_BITMAPSAVER_MOVIE | PLUGINFLAG_BITMAPSAVER_ALLOWOPTIONS | PLUGINFLAG_BITMAPSAVER_FORCESUFFIX;
-	return RegisterBitmapSaverPlugin(ID_PRORES_SAVER, "ProRes (FFmpeg)"_s, flags, ProResSaver::Alloc(), "mov"_s);
+	for (const ProResFormat& f : g_formats)
+	{
+		if (!RegisterBitmapSaverPlugin(f.id, maxon::String(f.name), flags, ProResSaver::Alloc(f), "mov"_s))
+			return false;
+	}
+	return true;
 }
