@@ -161,6 +161,12 @@ struct ProResMovie
 	std::vector<UChar> frame;	// width * height * (3|4) * 2 bytes, little endian 16-bit
 	std::wstring logPath;
 	Bool failed = false;
+
+	// Colour conversion from the bitmap's own profile (e.g. ACEScg when the view transform is not
+	// baked) to sRGB, done the same way Cinema 4D's built-in savers do. Prepared on the first frame.
+	Bool colorChecked = false;
+	ColorProfileConvert* colorConvert = nullptr;
+	std::vector<Float32> rowF;	// width * 3 floats
 };
 
 static void CloseHandleSafe(HANDLE& h)
@@ -353,6 +359,36 @@ private:
 // Saver
 // ------------------------------------------------------------------------------------------------
 
+// Sets up the bitmap profile -> sRGB conversion if the frame is not already sRGB. With OCIO and
+// "bake view transform" off, frames arrive in the render space (ACEScg) and Cinema 4D's own 8/16-bit
+// savers convert them to sRGB; without this the movie looks darker and over-saturated.
+static void PrepareColorConversion(ProResMovie& mv, const BaseBitmap* bm)
+{
+	mv.colorChecked = true;
+	const ColorProfile* src = bm->GetColorProfile(BaseBitmap::COLORPROFILE_INDEX_IMAGE);
+	const ColorProfile* dst = ColorProfile::GetDefaultSRGB();
+	// HasProfile() and operator== only look at ICC data, so they cannot be used for OCIO profiles;
+	// PrepareTransform() tells whether a conversion is needed.
+	if (!src || !dst)
+		return;
+
+	ColorProfileConvert* conv = ColorProfileConvert::Alloc();
+	if (!conv)
+		return;
+	if (!conv->PrepareTransform(COLORMODE::RGBf, src, COLORMODE::RGBf, dst, false))
+	{
+		ColorProfileConvert::Free(conv);
+		return;
+	}
+	mv.colorConvert = conv;
+	mv.rowF.resize((size_t)mv.width * 3);
+
+	maxon::String msg = "ProRes: converting colors from "_s;
+	msg += src->GetInfo(ColorProfile::COLORPROFILEINFO_NAME);
+	msg += " to sRGB"_s;
+	GePrint(msg);
+}
+
 class ProResSaver : public BitmapSaverData
 {
 	const ProResFormat* _format = nullptr;
@@ -417,6 +453,7 @@ public:
 		mv->width = bm->GetBw();
 		mv->height = bm->GetBh();
 		mv->alpha = UsesAlpha(_format->profile, data) && (savebits & SAVEBIT::ALPHA) != SAVEBIT::NONE;
+
 		mv->frame.resize((size_t)mv->width * (size_t)mv->height * (mv->alpha ? 4 : 3) * 2);
 
 		const IMAGERESULT res = StartFfmpeg(*mv, ffmpeg, ToWide(name.GetString()), _format->profile, data, fps);
@@ -445,10 +482,33 @@ public:
 
 		BaseBitmap* alphaChannel = mv->alpha ? bm->GetInternalChannel() : nullptr;
 
+		if (!mv->colorChecked)
+			PrepareColorConversion(*mv, bm);
+
 		for (Int32 y = 0; y < h; ++y)
 		{
 			UChar* row = mv->frame.data() + (size_t)y * (size_t)w * (size_t)bpp;
-			bm->GetPixelCnt(0, y, w, row, bpp, COLORMODE::RGBw, PIXELCNT::NONE);
+			if (mv->colorConvert)
+			{
+				// Convert to sRGB in float, then quantize to 16-bit ourselves.
+				bm->GetPixelCnt(0, y, w, reinterpret_cast<UChar*>(mv->rowF.data()), 3 * sizeof(Float32),
+					COLORMODE::RGBf, PIXELCNT::NONE, mv->colorConvert);
+				UInt16* px = reinterpret_cast<UInt16*>(row);
+				const Int32 step = bpp / 2;
+				for (Int32 x = 0; x < w; ++x)
+				{
+					for (Int32 c = 0; c < 3; ++c)
+					{
+						Float32 v = mv->rowF[(size_t)x * 3 + c];
+						v = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+						px[x * step + c] = (UInt16)(v * 65535.0f + 0.5f);
+					}
+				}
+			}
+			else
+			{
+				bm->GetPixelCnt(0, y, w, row, bpp, COLORMODE::RGBw, PIXELCNT::NONE);
+			}
 
 			if (mv->alpha)
 			{
@@ -489,6 +549,8 @@ public:
 			return IMAGERESULT::OK;
 
 		const Bool ok = FinishFfmpeg(*mv);
+		if (mv->colorConvert)
+			ColorProfileConvert::Free(mv->colorConvert);
 		if (!ok)
 			GePrint("ProRes: encoding failed. See log: "_s + FromWide(mv->logPath));
 		else
