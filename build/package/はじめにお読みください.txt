@@ -1,0 +1,36 @@
+ProRes (FFmpeg) — Cinema 4D __C4D_VERSION__ 用 ProRes 書き出しプラグイン（Windows）
+================================================================================
+
+レンダー設定 → 保存 → フォーマットに、ProRes の各プロファイルを追加します。
+  ProRes 422 Proxy / 422 LT / 422 / 422 HQ / 4444 / 4444 XQ（いずれも「(FFmpeg)」付き）
+
+※ この zip は Cinema 4D __C4D_VERSION__ 専用です。ほかのバージョンでは読み込まれません。
+
+■ インストール（どちらか）
+  A. 自動
+     1. この zip をすべて展開する（zip の中から直接実行しない）
+     2. Cinema 4D を閉じる
+     3. install.cmd をダブルクリックする（管理者権限の確認が出たら「はい」）
+        → C:\Program Files\Maxon Cinema 4D __C4D_VERSION__\plugins\c4d_prores にコピーされます
+
+  B. 手動
+     c4d_prores フォルダを、Cinema 4D の plugins フォルダにコピーする。
+     管理者権限を使いたくない場合は、Cinema 4D の 環境設定 → プラグイン で好きなフォルダを
+     追加し、そこに c4d_prores フォルダを置いても使えます。
+
+■ 使い方
+  1. レンダー設定 → 保存 → フォーマットで「ProRes 422 HQ (FFmpeg)」などを選ぶ
+  2. アルファ付きにするときは「ProRes 4444 (FFmpeg)」か「4444 XQ」を選び、
+     同じ「保存」の「アルファチャンネル」をオンにする
+  3. 必要なら「オプション…」で NTSC のフレームレート（23.976 など）や ffmpeg.exe の場所を設定する
+
+  色は Cinema 4D 標準の PNG などと同じく sRGB に変換して書き出します（OCIO の場合も）。
+
+■ 注意
+  - プラグイン ID は Maxon のテスト用（1000001〜1000006）です。同じテスト用 ID を使う
+    別のプラグインと一緒に入れると、どちらかが読み込まれないことがあります。
+  - FFmpeg の ProRes エンコーダは Apple の認定を受けたものではありません。
+
+■ 同梱の FFmpeg
+  c4d_prores\ffmpeg\ffmpeg.exe は www.gyan.dev の FFmpeg ビルドです（GPL v3）。
+  ライセンスと詳細は c4d_prores\ffmpeg\LICENSE と README.txt を見てください。
