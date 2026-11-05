@@ -29,16 +29,23 @@
 
 ## インストール
 
+[Releases](https://github.com/yama203/c4d-prores/releases) の `c4d_prores-<バージョン>-setup.exe` を実行します（管理者権限の確認が出ます。C4D は閉じておく）。
+
+- この PC に入っている Cinema 4D 2024 / 2026 を探して、選んだバージョンの `plugins\c4d_prores` に入れます（ffmpeg.exe も同梱）。
+- アンインストールは「設定 → アプリ」の「ProRes for Cinema 4D」から。
+
+手動で入れる場合：
+
 1. `dist/<バージョン>/c4d_prores/` フォルダを Cinema 4D の plugins フォルダにコピーする
    （例：`C:\Program Files\Maxon Cinema 4D 2026\plugins\`。または 環境設定 → プラグイン でフォルダを追加する）
 2. `ffmpeg.exe` を次のどこかに置く（上から順に探します）
    - オプション画面で指定したパス
-   - `c4d_prores\ffmpeg\ffmpeg.exe`
-   - `c4d_prores\ffmpeg.exe`
+   - `c4d_proresfmpegfmpeg.exe`
+   - `c4d_proresfmpeg.exe`
    - PATH の通った場所
 3. Cinema 4D を再起動する
 
-ビルド済みなら `buildinstall.ps1` で 2024 と 2026 の plugins フォルダにまとめてコピーできます（管理者権限の確認が出ます。C4D は閉じておく）。
+開発中は `build\install.ps1` で 2024 と 2026 の plugins フォルダにまとめてコピーできます（管理者権限の確認が出ます。C4D は閉じておく）。
 
 エンコードに失敗すると、コンソールに FFmpeg のログの場所（`%TEMP%\c4d_prores_*.log`）が表示されます。
 
@@ -60,6 +67,7 @@ cd build
   v143 だと SDK の nodes.framework がコンパイルできないため、このプラグインは cinema / core framework だけを使っています。
 - Project Tool に必要な `libmmd.dll` は C4D 2024 からコピーします。
 - テスト：`.\test_saver.ps1 -Version 2026`（c4dpy で 422 HQ・4444 アルファ・奇数解像度を書き出します）
+- インストーラー：`.\package.ps1 -AppVersion 0.2.0` で `dist\c4d_prores-0.2.0-setup.exe` を作ります（[Inno Setup 6](https://jrsoftware.org/isinfo.php) が必要：`winget install JRSoftware.InnoSetup`。スクリプトは `build\installer.iss`）
 
 ## 注意
 

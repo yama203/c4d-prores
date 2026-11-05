@@ -1,50 +1,33 @@
-# Builds the distributable zips from dist\<version>\c4d_prores:
-#   dist\c4d_prores-c4d<version>-win-x64.zip  (plugin + ffmpeg + its license, installer, read-me)
-#   .\package.ps1                       # 2024 and 2026
-#   .\package.ps1 -Version 2026 -FfmpegDir <gyan ffmpeg folder with LICENSE / README.txt>
+# Builds the installer from dist\2024 and dist\2026 (run build.ps1 for both first):
+#   dist\c4d_prores-<version>-setup.exe  (both plugin builds + one ffmpeg, installs into each C4D found)
+#   .\package.ps1 -AppVersion 0.2.0
+#   .\package.ps1 -AppVersion 0.2.0 -FfmpegDir <gyan ffmpeg folder with bin\ffmpeg.exe, LICENSE, README.txt>
+# Needs Inno Setup 6: winget install JRSoftware.InnoSetup
 param(
-	[string[]]$Version = @("2024", "2026"),
+	[Parameter(Mandatory)][string]$AppVersion,
 	[string]$FfmpegDir = ""
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$pkg = Join-Path $root "build\package"
+$dist = Join-Path $root "dist"
 if (-not $FfmpegDir) {
-	$exe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+	$exe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue |
+		Where-Object { $_.FullName -match "Gyan\.FFmpeg" } | Select-Object -First 1
 	if ($exe) { $FfmpegDir = Split-Path -Parent (Split-Path -Parent $exe.FullName) }
 }
-
-[AppContext]::SetSwitch("Switch.System.IO.Compression.ZipFile.UseBackslash", $false)
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$utf8Bom = New-Object System.Text.UTF8Encoding $true
-
-foreach ($v in $Version) {
-	$built = Join-Path $root "dist\$v\c4d_prores"
-	if (-not (Test-Path (Join-Path $built "c4d_prores.xdl64"))) { throw "Not built: $built (run build.ps1 -Version $v -Ffmpeg ...)" }
-	if (-not (Test-Path (Join-Path $built "ffmpeg\ffmpeg.exe"))) { throw "ffmpeg.exe missing in $built\ffmpeg" }
-
-	$stage = Join-Path $root "dist\package\$v\c4d_prores-c4d$v"
-	if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
-	New-Item -ItemType Directory -Force $stage | Out-Null
-	Copy-Item -Recurse $built (Join-Path $stage "c4d_prores")
-
-	# FFmpeg is GPL: ship its license and build notes next to the binary.
-	foreach ($f in "LICENSE", "README.txt") {
-		$p = Join-Path $FfmpegDir $f
-		if (-not (Test-Path $p)) { throw "FFmpeg $f not found in '$FfmpegDir' (pass -FfmpegDir)" }
-		Copy-Item $p (Join-Path $stage "c4d_prores\ffmpeg\$f")
-	}
-
-	foreach ($f in Get-ChildItem $pkg -File) {
-		$text = ([IO.File]::ReadAllText($f.FullName, [Text.Encoding]::UTF8) -replace "`r?`n", "`r`n").Replace("__C4D_VERSION__", $v)
-		$dst = Join-Path $stage $f.Name
-		if ($f.Extension -eq ".cmd") { [IO.File]::WriteAllText($dst, $text, [Text.Encoding]::ASCII) }
-		else { [IO.File]::WriteAllText($dst, $text, $utf8Bom) }   # Windows PowerShell 5.1 needs the BOM for Japanese
-	}
-
-	$zip = Join-Path $root "dist\c4d_prores-c4d$v-win-x64.zip"
-	if (Test-Path $zip) { Remove-Item $zip }
-	[IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip, [IO.Compression.CompressionLevel]::Optimal, $true, [Text.Encoding]::UTF8)
-	Write-Host ("Done: {0} ({1:0} MB)" -f $zip, ((Get-Item $zip).Length / 1MB))
+foreach ($f in "bin\ffmpeg.exe", "LICENSE", "README.txt") {
+	if (-not (Test-Path (Join-Path $FfmpegDir $f))) { throw "FFmpeg $f not found in '$FfmpegDir' (pass -FfmpegDir)" }
 }
+foreach ($v in "2024", "2026") {
+	if (-not (Test-Path (Join-Path $dist "$v\c4d_prores\c4d_prores.xdl64"))) { throw "Not built: dist\$v (run build.ps1 -Version $v)" }
+}
+
+$iscc = @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
+	Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $iscc) { throw "Inno Setup 6 is required: winget install JRSoftware.InnoSetup" }
+
+& $iscc /Q "/DAppVersion=$AppVersion" "/DDist=$dist" "/DFfmpegDir=$FfmpegDir" (Join-Path $root "build\installer.iss")
+if ($LASTEXITCODE) { throw "ISCC failed" }
+$setup = Join-Path $dist "c4d_prores-$AppVersion-setup.exe"
+Write-Host ("Done: {0} ({1:0} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))
