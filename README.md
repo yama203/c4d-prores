@@ -40,8 +40,8 @@
    （例：`C:\Program Files\Maxon Cinema 4D 2026\plugins\`。または 環境設定 → プラグイン でフォルダを追加する）
 2. `ffmpeg.exe` を次のどこかに置く（上から順に探します）
    - オプション画面で指定したパス
-   - `c4d_proresfmpegfmpeg.exe`
-   - `c4d_proresfmpeg.exe`
+   - `c4d_prores\ffmpeg\ffmpeg.exe`
+   - `c4d_prores\ffmpeg.exe`
    - PATH の通った場所
 3. Cinema 4D を再起動する
 
@@ -77,3 +77,13 @@ cd build
   ffmpeg.exe を同梱して配布する場合は、そのビルドのライセンス（GPL / LGPL）に従ってください。
 - **音声**：まだ書き出しません。
 - **色**：OCIO（2024 以降の既定）で「ビュー変換をベイク」がオフのときは、レンダリング空間（ACEScg など）のまま渡されるので、C4D 標準の PNG などと同じく sRGB に変換してからエンコードします。ベイクがオンのときは渡された画像をそのまま使います。
+
+## ライセンス
+
+このプラグインのソースコードは [MIT](LICENSE) です。
+
+- ビルドには Maxon の Cinema 4D SDK を使います（SDK 自体は Maxon のライセンス。このリポジトリには含めていません）。
+- 配布物（setup.exe）に同梱している ffmpeg.exe は [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) の 9.0.1 essentials ビルドで、GPL v3 です。
+  プラグインとは別のプログラムとして起動して使っています。ソースは [FFmpeg bf1b838f2a](https://github.com/FFmpeg/FFmpeg/commit/bf1b838f2a)、
+  ライセンス文と同梱ライブラリの版はインストール先の `c4d_prores\ffmpeg\LICENSE` と `README.txt` にあります。
+- ProRes は Apple Inc. の商標です。

@@ -48,10 +48,12 @@ Name: "c4d2026"; Description: "Cinema 4D 2026"; Types: custom; Check: HasC4D('20
 [Files]
 ; The same ffmpeg source files are referenced for both versions, so the installer stores them once.
 Source: "{#Dist}\2024\c4d_prores\c4d_prores.xdl64"; DestDir: "{code:PluginDir|2024}"; Components: c4d2024; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{code:PluginDir|2024}"; Components: c4d2024; Flags: ignoreversion
 Source: "{#FfmpegDir}\bin\ffmpeg.exe"; DestDir: "{code:PluginDir|2024}\ffmpeg"; Components: c4d2024; Flags: ignoreversion
 Source: "{#FfmpegDir}\LICENSE"; DestDir: "{code:PluginDir|2024}\ffmpeg"; Components: c4d2024; Flags: ignoreversion
 Source: "{#FfmpegDir}\README.txt"; DestDir: "{code:PluginDir|2024}\ffmpeg"; Components: c4d2024; Flags: ignoreversion
 Source: "{#Dist}\2026\c4d_prores\c4d_prores.xdl64"; DestDir: "{code:PluginDir|2026}"; Components: c4d2026; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{code:PluginDir|2026}"; Components: c4d2026; Flags: ignoreversion
 Source: "{#FfmpegDir}\bin\ffmpeg.exe"; DestDir: "{code:PluginDir|2026}\ffmpeg"; Components: c4d2026; Flags: ignoreversion
 Source: "{#FfmpegDir}\LICENSE"; DestDir: "{code:PluginDir|2026}\ffmpeg"; Components: c4d2026; Flags: ignoreversion
 Source: "{#FfmpegDir}\README.txt"; DestDir: "{code:PluginDir|2026}\ffmpeg"; Components: c4d2026; Flags: ignoreversion
